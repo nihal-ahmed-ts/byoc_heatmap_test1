@@ -1,0 +1,41 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .heatmap-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    padding: 20px;
+  }
+  
+  .heatmap-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+    color: white;
+    text-align: center;
+    border-radius: 5px;
+  }
+  
+  .category-name {
+    font-size: 14px;
+    font-weight: bold;
+  }
+  
+  .category-value {
+    font-size: 18px;
+  }
+  
+  .category-change {
+    font-size: 14px;
+  }
+  
+  .category-total {
+    font-size: 12px;
+  }
+  
