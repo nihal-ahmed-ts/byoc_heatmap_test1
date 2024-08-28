@@ -60,6 +60,10 @@ function getDataModel(chartModel) {
     // Sort the dataModel by value and pick the top 10
     const top10 = _.orderBy(dataModel, ['value'], ['desc']).slice(0, 10);
 
+    // Log the data model for debugging
+    console.log('DataModel:', dataModel);
+    console.log('Top 10:', top10);
+
     return { dataModel, top10 };
 }
 
@@ -69,6 +73,7 @@ function render(ctx) {
     const { dataModel, top10 } = getDataModel(chartModel);
 
     if (!dataModel.length) {
+        console.error('No valid data to render.');
         return;
     }
 
@@ -117,8 +122,11 @@ function render(ctx) {
             }
         });
     } catch (e) {
-        console.error('Render failed', e);
-        throw e;
+        console.error('Render failed due to an error in Highcharts:', e);
+        ctx.emitEvent(ChartToTSEvent.RenderError, {
+            hasError: true,
+            error: e
+        });
     }
 }
 
