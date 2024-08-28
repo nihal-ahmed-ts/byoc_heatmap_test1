@@ -1,117 +1,168 @@
-import { ChartToTSEvent, ColumnType, getChartContext } from '@thoughtspot/ts-chart-sdk';
+import Highcharts from 'highcharts';
+import HighchartsTreemap from 'highcharts/modules/treemap';
+import {
+    ChartColumn,
+    ChartConfig,
+    ChartModel,
+    ChartToTSEvent,
+    CustomChartContext,
+    DataPointsArray,
+    getChartContext,
+    ColumnType,
+    Query
+} from '@thoughtspot/ts-chart-sdk';
 import _ from 'lodash';
-import numeral from 'numeral';
 
-// Function to calculate color gradient
-const colorGradient = (value) => {
-  if (value < -2) return '#ff6666';  // Darker red for high negative
-  if (value < -1) return '#ff9999';  // Lighter red
-  if (value < 0) return '#ffcccc';   // Lightest red
-  if (value < 1) return '#ccffcc';   // Lightest green
-  if (value < 2) return '#99ff99';   // Lighter green
-  return '#66cc66';  // Darker green for high positive
-};
+HighchartsTreemap(Highcharts);
 
-// Function to render the heatmap
-function renderHeatmap(categories) {
-  const container = document.getElementById('heatmap');
-  container.innerHTML = '';
-  
-  categories.forEach((category, index) => {
-    const div = document.createElement('div');
-    div.className = 'heatmap-cell';
-    div.style.backgroundColor = colorGradient(category.change);
+// Helper function to extract data for columns
+function getDataForColumn(column, dataArr) {
+    const idx = _.findIndex(dataArr.columns, (colId) => column.id === colId);
+    return _.map(dataArr.dataValue, (row) => row[idx]);
+}
 
-    if (index < 10) {
-      // Display full metrics for top 10 categories
-      div.innerHTML = `
-        <div class="category-name">${category.name}</div>
-        <div class="category-value">${numeral(category.value).format('$0,0.0a')}</div>
-        <div class="category-change">${category.change}% vs LY</div>
-        <div class="category-total">${category.total}% of Total</div>
-      `;
-    } else {
-      // Only display category name for other categories
-      div.innerHTML = `
-        <div class="category-name">${category.name}</div>
-      `;
+// Function to prepare the data model for the treemap
+function getDataModel(chartModel) {
+    const configDimensions = chartModel.config?.chartConfig?.[0].dimensions ?? [];
+    const dataArr = chartModel.data?.[0].data ?? undefined;
+
+    if (!dataArr) {
+        console.error("No data available for the chart.");
+        return { dataModel: [], top10: [] };
     }
-    
-    // Add tooltip for all categories
-    div.title = `
-      ${category.name}
-      Value: ${numeral(category.value).format('$0,0.0a')}
-      Change: ${category.change}% vs LY
-      Total: ${category.total}% of Total
-    `;
-    
-    container.appendChild(div);
-  });
+
+    const xAxisColumns = configDimensions?.[0].columns ?? [];
+    const yAxisColumns = configDimensions?.[1].columns ?? [];
+
+    if (!xAxisColumns.length || !yAxisColumns.length || yAxisColumns.length < 2) {
+        console.error("Invalid column configuration. Ensure the first column is an attribute and the next two are measures.");
+        return { dataModel: [], top10: [] };
+    }
+
+    const totalValue = getDataForColumn(yAxisColumns[0], dataArr).reduce((sum, value) => sum + value, 0);
+
+    const dataModel = dataArr?.dataValue.map((row, idx) => {
+        const value = row[yAxisColumns[0].id];
+        const lyValue = row[yAxisColumns[1]?.id] || value; // Fallback to current value if LY value is undefined
+        const percentageChange = lyValue !== 0 ? ((value - lyValue) / lyValue) * 100 : 0;
+        const percentageOfTotal = totalValue !== 0 ? (value / totalValue) * 100 : 0;
+
+        return {
+            name: row[xAxisColumns[0].id],
+            value: value,
+            lyValue: lyValue,
+            colorValue: percentageChange,
+            tooltipLabel: `<b>${row[xAxisColumns[0].id]}</b><br>Value: ${value}<br>LY Value: ${lyValue}<br>Change: ${percentageChange.toFixed(2)}%<br>% of Total: ${percentageOfTotal.toFixed(2)}%`,
+            dataLabel: `${row[xAxisColumns[0].id]}<br>Value: ${value}<br>Change: ${percentageChange.toFixed(2)}%<br>% of Total: ${percentageOfTotal.toFixed(2)}%`
+        };
+    });
+
+    // Sort the dataModel by value and pick the top 10
+    const top10 = _.orderBy(dataModel, ['value'], ['desc']).slice(0, 10);
+
+    return { dataModel, top10 };
 }
 
-// Function to calculate percentage change and percentage of total
-function calculateMetrics(dataArr, chartModel) {
-  const grossMarginIdx = _.findIndex(chartModel.columns, col => col.name === 'Gross Margin');
-  const grossMarginLYIdx = _.findIndex(chartModel.columns, col => col.name === 'Gross Margin LY');
+// Function to render the chart
+function render(ctx) {
+    const chartModel = ctx.getChartModel();
+    const { dataModel, top10 } = getDataModel(chartModel);
 
-  // Calculate total gross margin
-  const totalValue = _.sumBy(dataArr, row => row[grossMarginIdx]);
+    if (!dataModel.length) {
+        return;
+    }
 
-  // Map through the data to calculate metrics for each category
-  return dataArr.map(row => {
-    const name = row[_.findIndex(chartModel.columns, col => col.name === 'Category')];
-    const value = row[grossMarginIdx];
-    const valueLY = row[grossMarginLYIdx];
+    try {
+        Highcharts.chart('container', {
+            colorAxis: {
+                stops: [
+                    [0, '#ff6666'],  // Red for the most negative change
+                    [0.5, '#FFFFFF'], // Neutral color at zero change
+                    [1, '#66cc66']   // Green for the most positive change
+                ],
+                min: -100,
+                max: 100
+            },
+            series: [{
+                type: 'treemap',
+                layoutAlgorithm: 'squarified',
+                dataLabels: {
+                    enabled: true,
+                    formatter: function () {
+                        const value = this.point.value;
+                        const lyValue = this.point.lyValue;
+                        const percentageChange = lyValue !== 0 ? ((value - lyValue) / lyValue) * 100 : 0;
+                        const totalValue = this.series.data.reduce((sum, point) => sum + point.value, 0);
+                        const percentageOfTotal = totalValue !== 0 ? (value / totalValue) * 100 : 0;
 
-    // Calculate percentage change vs LY
-    const change = valueLY ? ((value - valueLY) / valueLY * 100).toFixed(2) : 0;
-
-    // Calculate percentage of total
-    const total = ((value / totalValue) * 100).toFixed(2);
-
-    return { name, value, change, total };
-  });
+                        // Check if the current point is in the top 10
+                        if (top10.some(point => point.name === this.point.name)) {
+                            return `<b>${this.point.name}</b><br>Value: ${value}<br>Change: ${percentageChange.toFixed(2)}%<br>% of Total: ${percentageOfTotal.toFixed(2)}%`;
+                        }
+                        return null;
+                    },
+                    style: {
+                        textOutline: false
+                    }
+                },
+                data: dataModel
+            }],
+            title: {
+                text: 'Highcharts Treemap'
+            },
+            tooltip: {
+                formatter: function () {
+                    return this.point.tooltipLabel;
+                }
+            }
+        });
+    } catch (e) {
+        console.error('Render failed', e);
+        throw e;
+    }
 }
 
-async function render(ctx) {
-  const chartModel = await ctx.getChartModel();
-  
-  const dataArr = chartModel.data?.[0]?.data ?? [];
-
-  // Calculate metrics
-  const categories = calculateMetrics(dataArr, chartModel);
-
-  // Render heatmap with the calculated metrics
-  renderHeatmap(categories);
-}
-
+// Function to render the chart in the ThoughtSpot environment
 const renderChart = async (ctx) => {
-  try {
-    ctx.emitEvent(ChartToTSEvent.RenderStart);
-    await render(ctx);
-  } catch (e) {
-    ctx.emitEvent(ChartToTSEvent.RenderError, { hasError: true, error: e });
-  } finally {
-    ctx.emitEvent(ChartToTSEvent.RenderComplete);
-  }
+    try {
+        ctx.emitEvent(ChartToTSEvent.RenderStart);
+        render(ctx);
+    } catch (e) {
+        ctx.emitEvent(ChartToTSEvent.RenderError, {
+            hasError: true,
+            error: e
+        });
+    } finally {
+        ctx.emitEvent(ChartToTSEvent.RenderComplete);
+    }
 };
 
+// Initialize the chart context
 (async () => {
-  const ctx = await getChartContext({
-    renderChart,
-    chartConfigEditorDefinition: [
-      {
-        key: 'column',
-        label: 'Custom Column',
-        descriptionText: 'This chart accepts attributes and measures. Category for name, Gross Margin for values, and Gross Margin LY for Last Year’s values.',
-        columnSections: [
-          { key: 'Category', label: 'Category', allowAttributeColumns: true, allowMeasureColumns: false },
-          { key: 'Gross Margin', label: 'Gross Margin', allowAttributeColumns: false, allowMeasureColumns: true },
-          { key: 'Gross Margin LY', label: 'Gross Margin LY', allowAttributeColumns: false, allowMeasureColumns: true },
-        ],
-      },
-    ],
-  });
+    const ctx = await getChartContext({
+        getDefaultChartConfig: (chartModel) => {
+            const cols = chartModel.columns;
+            const measureColumns = _.filter(cols, col => col.type === ColumnType.MEASURE);
+            const attributeColumns = _.filter(cols, col => col.type === ColumnType.ATTRIBUTE);
 
-  renderChart(ctx);
+            if (attributeColumns.length === 0 || measureColumns.length < 2) {
+                console.error('Ensure that the first column is an attribute and the next two are measures.');
+                return [];
+            }
+
+            return [{
+                key: 'default',
+                dimensions: [
+                    { key: 'x', columns: [attributeColumns[0]] },
+                    { key: 'y', columns: measureColumns.slice(0, 2) }
+                ]
+            }];
+        },
+        getQueriesFromChartConfig: (chartConfig) => chartConfig.map(config => ({
+            queryColumns: _.flatMap(config.dimensions, dimension => dimension.columns)
+        })),
+        renderChart: (ctx) => renderChart(ctx)
+    });
+
+    renderChart(ctx);
 })();
