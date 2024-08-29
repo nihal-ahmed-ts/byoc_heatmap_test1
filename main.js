@@ -1,5 +1,3 @@
-import Highcharts from 'highcharts';
-import HighchartsTreemap from 'highcharts/modules/treemap';
 import {
     ChartColumn,
     ChartConfig,
@@ -12,8 +10,7 @@ import {
     Query
 } from '@thoughtspot/ts-chart-sdk';
 import _ from 'lodash';
-
-HighchartsTreemap(Highcharts);
+import * as d3 from 'd3';
 
 // Helper function to extract data for columns
 function getDataForColumn(column, dataArr) {
@@ -67,67 +64,69 @@ function getDataModel(chartModel) {
     return { dataModel, top10 };
 }
 
-// Function to render the chart
+// Function to render the treemap using D3.js
 function render(ctx) {
     const chartModel = ctx.getChartModel();
-    const { dataModel, top10 } = getDataModel(chartModel);
+    const { dataModel } = getDataModel(chartModel);
 
     if (!dataModel.length) {
         console.error('No valid data to render.');
         return;
     }
 
-    try {
-        Highcharts.chart('container', {
-            colorAxis: {
-                stops: [
-                    [0, '#ff6666'],  // Red for the most negative change
-                    [0.5, '#FFFFFF'], // Neutral color at zero change
-                    [1, '#66cc66']   // Green for the most positive change
-                ],
-                min: -100,
-                max: 100
-            },
-            series: [{
-                type: 'treemap',
-                layoutAlgorithm: 'squarified',
-                dataLabels: {
-                    enabled: true,
-                    formatter: function () {
-                        const value = this.point.value;
-                        const lyValue = this.point.lyValue;
-                        const percentageChange = lyValue !== 0 ? ((value - lyValue) / lyValue) * 100 : 0;
-                        const totalValue = this.series.data.reduce((sum, point) => sum + point.value, 0);
-                        const percentageOfTotal = totalValue !== 0 ? (value / totalValue) * 100 : 0;
+    // Clear previous chart
+    d3.select('#container').html('');
 
-                        // Check if the current point is in the top 10
-                        if (top10.some(point => point.name === this.point.name)) {
-                            return `<b>${this.point.name}</b><br>Value: ${value}<br>Change: ${percentageChange.toFixed(2)}%<br>% of Total: ${percentageOfTotal.toFixed(2)}%`;
-                        }
-                        return null;
-                    },
-                    style: {
-                        textOutline: false
-                    }
-                },
-                data: dataModel
-            }],
-            title: {
-                text: 'Highcharts Treemap'
-            },
-            tooltip: {
-                formatter: function () {
-                    return this.point.tooltipLabel;
-                }
-            }
+    // Set up the dimensions
+    const width = document.getElementById('container').offsetWidth;
+    const height = 600;
+
+    // Create a root node for the treemap
+    const root = d3.hierarchy({ children: dataModel })
+        .sum(d => d.value)
+        .sort((a, b) => b.value - a.value);
+
+    // Create the treemap layout
+    d3.treemap()
+        .size([width, height])
+        .padding(2)
+        .round(true)(root);
+
+    // Select the container and append divs for each node
+    const nodes = d3.select('#container')
+        .selectAll('.node')
+        .data(root.leaves())
+        .enter()
+        .append('div')
+        .attr('class', 'node')
+        .style('left', d => `${d.x0}px`)
+        .style('top', d => `${d.y0}px`)
+        .style('width', d => `${d.x1 - d.x0}px`)
+        .style('height', d => `${d.y1 - d.y0}px`)
+        .style('background', d => d3.interpolateBlues(d.data.colorValue / 100))
+        .style('position', 'absolute')
+        .on('mouseover', function (event, d) {
+            d3.select('#tooltip')
+                .style('visibility', 'visible')
+                .html(d.data.tooltipLabel)
+                .style('left', `${event.pageX + 5}px`)
+                .style('top', `${event.pageY + 5}px`);
+        })
+        .on('mousemove', function (event) {
+            d3.select('#tooltip')
+                .style('left', `${event.pageX + 5}px`)
+                .style('top', `${event.pageY + 5}px`);
+        })
+        .on('mouseout', function () {
+            d3.select('#tooltip').style('visibility', 'hidden');
         });
-    } catch (e) {
-        console.error('Render failed due to an error in Highcharts:', e);
-        ctx.emitEvent(ChartToTSEvent.RenderError, {
-            hasError: true,
-            error: e
-        });
-    }
+
+    // Append text labels to each node
+    nodes.append('text')
+        .attr('class', 'label')
+        .style('font-size', '12px')
+        .style('color', '#fff')
+        .text(d => d.data.name);
 }
 
 // Function to render the chart in the ThoughtSpot environment

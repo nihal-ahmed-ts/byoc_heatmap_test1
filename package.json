@@ -1,20 +1,20 @@
 {
-    "name": "heatmap",
-    "private": true,
-    "version": "0.0.0",
-    "type": "module",
-    "scripts": {
-      "dev": "vite",
-      "build": "vite build",
-      "preview": "vite preview"
-    },
-    "devDependencies": {
-      "vite": "^5.2.0"
-    },
-    "dependencies": {
-      "@thoughtspot/ts-chart-sdk": "^0.0.2-alpha.7",
-      "highcharts": "^11.4.3",
-      "lodash": "^4.17.21",
-      "numeral": "^2.0.6"
-    }
+  "name": "treemap",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "@thoughtspot/ts-chart-sdk": "^0.0.2-alpha.7",
+    "lodash": "^4.17.21",
+    "numeral": "^2.0.6",
+    "d3": "^7.8.4"
   }
+}
