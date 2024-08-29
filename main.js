@@ -72,6 +72,11 @@ function getDataModel(chartModel) {
 // Function to render the treemap using D3.js
 function render(ctx) {
     const chartModel = ctx.getChartModel();
+    if (!chartModel) {
+        console.error('Chart model is undefined');
+        return;
+    }
+
     const { dataModel } = getDataModel(chartModel);
 
     if (!dataModel.length) {
@@ -79,11 +84,17 @@ function render(ctx) {
         return;
     }
 
+    const container = document.getElementById('container');
+    if (!container) {
+        console.error('Container element not found');
+        return;
+    }
+
     // Clear previous chart
     d3.select('#container').html('');
 
     // Set up the dimensions
-    const width = document.getElementById('container').offsetWidth;
+    const width = container.offsetWidth;
     const height = 600;
 
     // Create a root node for the treemap
@@ -178,3 +189,17 @@ const renderChart = async (ctx) => {
 
     renderChart(ctx);
 })();
+
+// Example function to handle possible timeout or fetch errors
+const fetchData = async () => {
+    try {
+        const response = await fetch('your-data-endpoint');
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching data:', error);
+        // Handle timeout or retry logic here
+        return null;
+    }
+};
