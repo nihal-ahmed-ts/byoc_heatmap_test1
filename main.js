@@ -20,11 +20,16 @@ function getDataForColumn(column, dataArr) {
 
 // Function to prepare the data model for the treemap
 function getDataModel(chartModel) {
+    if (!chartModel || !chartModel.data || !chartModel.data[0].data) {
+        console.error("No data available for the chart.");
+        return { dataModel: [], top10: [] };
+    }
+
     const configDimensions = chartModel.config?.chartConfig?.[0].dimensions ?? [];
     const dataArr = chartModel.data?.[0].data ?? undefined;
 
     if (!dataArr) {
-        console.error("No data available for the chart.");
+        console.error("No data array available.");
         return { dataModel: [], top10: [] };
     }
 
@@ -148,13 +153,13 @@ const renderChart = async (ctx) => {
 (async () => {
     const ctx = await getChartContext({
         getDefaultChartConfig: (chartModel) => {
-            const cols = chartModel.columns;
+            const cols = chartModel.columns || [];
             const measureColumns = _.filter(cols, col => col.type === ColumnType.MEASURE);
             const attributeColumns = _.filter(cols, col => col.type === ColumnType.ATTRIBUTE);
 
             if (attributeColumns.length === 0 || measureColumns.length < 2) {
                 console.error('Ensure that the first column is an attribute and the next two are measures.');
-                return [];
+                return []; // Return an empty configuration if invalid
             }
 
             return [{
